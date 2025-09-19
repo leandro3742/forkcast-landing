@@ -31,17 +31,7 @@ import {
   Shield,
   Globe,
 } from "lucide-react"
-import { Resend } from "resend"
-import SupplierEmail from "@/emails/SupplierEmail"
-import { render } from "@react-email/render"
-
 const CALENDLY_URL = "https://calendly.com/leandro-forkcast"
-
-const currencyRates = {
-  USD: 1,
-  UYU: 43.5,
-  ARS: 1050,
-}
 
 const pricingTiers = {
   starter: { usdMonthly: 0, usdAnnual: 0, name: "Starter" },

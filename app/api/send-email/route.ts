@@ -6,10 +6,6 @@ import { render } from '@react-email/render';
 // Inicializar Resend con la API key
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Admin emails para notificaciones desde variables de entorno o direcciones por defecto
-const adminEmailsStr = process.env.ADMIN_EMAILS || '';
-const ADMIN_EMAILS = adminEmailsStr.split(',').map(email => email.trim());
-
 // Configuración del remitente
 const FROM_NAME = process.env.FROM_NAME || 'ForkCast';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
