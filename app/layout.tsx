@@ -63,6 +63,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${inter.variable} antialiased`}>
       <head>
+        <link rel="icon" href="/logo.png" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

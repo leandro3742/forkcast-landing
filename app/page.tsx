@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   Dialog,
@@ -30,10 +30,12 @@ import {
   MessageSquare,
   Shield,
   Globe,
-  Utensils,
 } from "lucide-react"
+import { Resend } from "resend"
+import SupplierEmail from "@/emails/SupplierEmail"
+import { render } from "@react-email/render"
 
-const CALENDLY_URL = "https://calendly.com/forkcast/demo"
+const CALENDLY_URL = "https://calendly.com/leandro-forkcast"
 
 const currencyRates = {
   USD: 1,
@@ -42,28 +44,99 @@ const currencyRates = {
 }
 
 const pricingTiers = {
-  starter: { usd: 0, name: "Starter" },
-  pro: { usd: 49, name: "Pro" },
-  business: { usd: 149, name: "Business" },
-  enterprise: { usd: null, name: "Enterprise" },
+  starter: { usdMonthly: 0, usdAnnual: 0, name: "Starter" },
+  pro: { usdMonthly: 40, usdAnnual: 490, name: "Pro" }, // Ajustado a 40 USD mensual como solicitado
+  enterprise: { usdMonthly: null, usdAnnual: null, name: "Enterprise" },
 }
 
 export default function ForkCastLanding() {
-  const [currency, setCurrency] = useState<"USD" | "UYU" | "ARS">("USD")
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly")
-  const [language, setLanguage] = useState<"es" | "en">("es")
   const [demoOpen, setDemoOpen] = useState(false)
-  const [contactOpen, setContactOpen] = useState(false)
+  const [calendlyOpen, setCalendlyOpen] = useState(false)
+  const [signupOpen, setSignupOpen] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<string>("") // Para guardar qué plan seleccionó
+  
+  // Estado para el formulario de registro
+  const [registerForm, setRegisterForm] = useState({
+    businessName: '',
+    fullName: '',
+    email: '',
+    taxId: '',
+    location: ''
+  })
+  
+  // Estados para el formulario de proveedores
+  const [supplierForm, setSupplierForm] = useState({
+    companyName: '',
+    contactName: '',
+    email: '',
+    phone: '',
+    productType: '',
+    coverageArea: '',
+    message: ''
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  const formatPrice = (usdPrice: number | null) => {
-    if (usdPrice === null) return null
-    const rate = currencyRates[currency]
-    const price = usdPrice * rate
-    const annualDiscount = billingPeriod === "annual" ? 0.83 : 1 // 2 months free
-    const finalPrice = Math.round(price * annualDiscount)
+  // Función para manejar el envío del formulario de proveedores
+  const handleSupplierSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Validación básica
+    if (!supplierForm.companyName || !supplierForm.contactName || !supplierForm.email) {
+      setSubmitError('Por favor completa los campos obligatorios: Empresa, Nombre y Email')
+      return
+    }
+    
+    setIsSubmitting(true)
+    setSubmitError('')
+    
+    try {
+      // Enviar todo a través del endpoint API del servidor
+      // El servidor se encarga de enviar emails tanto al proveedor como a los administradores
+      const apiResponse = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(supplierForm),
+      })
+      
+      const data = await apiResponse.json()
+      
+      if (!apiResponse.ok) {
+        throw new Error(data.error || data.message || 'Error al enviar el formulario')
+      }
+      
+      // Éxito
+      setSubmitSuccess(true)
+      setSupplierForm({
+        companyName: '',
+        contactName: '',
+        email: '',
+        phone: '',
+        productType: '',
+        coverageArea: '',
+        message: ''
+      })
+    } catch (error) {
+      console.error('Error al enviar el formulario:', error)
+      setSubmitError(error instanceof Error ? error.message : 'Error al enviar el formulario')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-    const symbols = { USD: "$", UYU: "$U", ARS: "$" }
-    return `${symbols[currency]}${finalPrice.toLocaleString()}`
+  // Función para manejar cambios en los campos del formulario
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setSupplierForm(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
   const copy = {
@@ -72,7 +145,7 @@ export default function ForkCastLanding() {
         title: "Compras más inteligentes para tu restaurante, basadas en tus ventas reales.",
         subtitle:
           "ForkCast analiza ventas históricas, stock actual y recetas para prever lo que vas a necesitar, evitar sobrecompras y armar órdenes de compra por proveedor.",
-        primaryCta: "Empezar prueba gratis",
+        primaryCta: "Agendar Llamada",
         secondaryCta: "Ver demo de 3 minutos",
         badges: ["Inventario-consciente", "Listas por proveedor", "Conversión automática de unidades"],
       },
@@ -102,45 +175,41 @@ export default function ForkCastLanding() {
         ],
       },
     },
-    en: {
-      hero: {
-        title: "Smarter restaurant purchasing, powered by your real sales.",
-        subtitle:
-          "ForkCast analyzes past sales, current stock, and recipes to forecast needs, avoid over-buying, and auto-build purchase orders by supplier.",
-        primaryCta: "Start free trial",
-        secondaryCta: "See 3-min demo",
-        badges: ["Works with CSV/Excel", "Inventory-aware", "Restaurant-first"],
-      },
-      benefits: [
-        { title: "Buy exactly what you need", desc: "Forecast from real sales + recipes." },
-        { title: "Compare suppliers, transparently", desc: "Category averages & best price per vendor." },
-        { title: "No more unit headaches", desc: "ml↔l, g↔kg, and pack sizes handled automatically." },
-      ],
-      howItWorks: {
-        title: "How it works",
-        steps: [
-          { title: "Connect your data", desc: "Upload sales (Excel/CSV), inventory export, and supplier lists." },
-          { title: "ForkCast analyzes", desc: "AI reconciles units, maps products, and learns your patterns." },
-          {
-            title: "Purchase with confidence",
-            desc: "Get a ready-to-send purchase list by supplier, with suggested quantities and substitutions.",
-          },
-        ],
-      },
-    },
   }
 
-  const currentCopy = copy[language]
+  const currentCopy = copy.es
+
+  // Componente de diálogo para Calendly
+  const CalendlyDialog = () => (
+    <Dialog open={calendlyOpen} onOpenChange={setCalendlyOpen}>
+      <DialogContent className="max-w-4xl h-[80vh]">
+        <DialogHeader>
+          <DialogTitle>Agenda una demo con nosotros</DialogTitle>
+          <DialogDescription>
+            Selecciona una fecha y hora que te convenga para conocer más sobre ForkCast
+          </DialogDescription>
+        </DialogHeader>
+        <div className="h-full w-full">
+          <iframe
+            src={`${CALENDLY_URL}?embed=true&hideCookieBanner=true`}
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            title="Calendly Scheduling"
+            className="min-h-[500px]"
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-stone-600/95 backdrop-blur border-b border-stone-700">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
-              <Utensils className="w-5 h-5 text-white" />
-            </div>
+          <div className="flex items-center space-x-3">
+            <img src="/logo.png" alt="ForkCast" className="h-8 w-auto" />
             <span className="text-xl font-bold text-white">ForkCast</span>
           </div>
 
@@ -151,23 +220,17 @@ export default function ForkCastLanding() {
             <a href="#pricing" className="text-stone-200 hover:text-amber-400">
               Precios
             </a>
+            <a href="#proveedores" className="text-stone-200 hover:text-amber-400">
+              Proveedores
+            </a>
             <a href="#faq" className="text-stone-200 hover:text-amber-400">
               FAQ
             </a>
-            <Select value={language} onValueChange={(value: "es" | "en") => setLanguage(value)}>
-              <SelectTrigger className="w-16 bg-stone-700 border-stone-600 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="es">ES</SelectItem>
-                <SelectItem value="en">EN</SelectItem>
-              </SelectContent>
-            </Select>
           </nav>
 
           <Button
             className="bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold"
-            onClick={() => window.open(CALENDLY_URL, "_blank")}
+            onClick={() => setCalendlyOpen(true)}
           >
             {currentCopy.hero.primaryCta}
           </Button>
@@ -201,7 +264,7 @@ export default function ForkCastLanding() {
             <Button
               size="lg"
               className="bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold text-lg px-8"
-              onClick={() => window.open(CALENDLY_URL, "_blank")}
+              onClick={() => setCalendlyOpen(true)}
             >
               {currentCopy.hero.primaryCta}
             </Button>
@@ -323,18 +386,7 @@ export default function ForkCastLanding() {
           </h2>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <Select value={currency} onValueChange={(value: "USD" | "UYU" | "ARS") => setCurrency(value)}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USD">USD ($)</SelectItem>
-                <SelectItem value="UYU">UYU ($U)</SelectItem>
-                <SelectItem value="ARS">ARS ($)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Tabs value={billingPeriod} onValueChange={(value: "monthly" | "annual") => setBillingPeriod(value)}>
+            <Tabs value={billingPeriod} onValueChange={(value) => setBillingPeriod(value as "monthly" | "annual")}>
               <TabsList>
                 <TabsTrigger value="monthly">Mensual</TabsTrigger>
                 <TabsTrigger value="annual">Anual (ahorrá 2 meses)</TabsTrigger>
@@ -342,7 +394,7 @@ export default function ForkCastLanding() {
             </Tabs>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-3 lg:grid-cols-3 gap-6">
             {Object.entries(pricingTiers).map(([key, tier]) => (
               <Card key={key} className={`relative ${key === "pro" ? "border-amber-500 shadow-lg" : ""}`}>
                 {key === "pro" && (
@@ -352,14 +404,26 @@ export default function ForkCastLanding() {
                 )}
                 <CardHeader className="text-center">
                   <CardTitle className="text-xl">{tier.name}</CardTitle>
-                  <div className="text-3xl font-bold text-slate-900 dark:text-white">
-                    {tier.usd === null ? "Contactanos" : tier.usd === 0 ? "Gratis" : formatPrice(tier.usd)}
-                    {tier.usd !== null && tier.usd > 0 && (
-                      <span className="text-sm font-normal text-slate-500">
-                        /{billingPeriod === "monthly" ? "mes" : "año"}
-                      </span>
-                    )}
-                  </div>
+                  {tier.usdMonthly === null ? (
+                    <div className="text-3xl font-bold text-slate-900 dark:text-white">Contactanos</div>
+                  ) : tier.usdMonthly === 0 ? (
+                    <div className="text-3xl font-bold text-slate-900 dark:text-white">Gratis</div>
+                  ) : billingPeriod === "monthly" ? (
+                    <div>
+                      <div className="text-3xl font-bold text-slate-900 dark:text-white">
+                        ${tier.usdMonthly}<span className="text-sm font-normal text-slate-500">/mes</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-3xl font-bold text-slate-900 dark:text-white">
+                        ${tier.usdMonthly}<span className="text-sm font-normal text-slate-500">/mes</span>
+                      </div>
+                      <div className="text-base text-slate-500 mt-1">
+                        ${tier.usdAnnual} total anual
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 mb-6">
@@ -420,9 +484,12 @@ export default function ForkCastLanding() {
                       key === "pro" ? "bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold" : ""
                     }`}
                     variant={key === "pro" ? "default" : "outline"}
-                    onClick={() => window.open(CALENDLY_URL, "_blank")}
+                    onClick={() => {
+                      setSelectedPlan(key)
+                      setSignupOpen(true)
+                    }}
                   >
-                    {tier.usd === null ? "Contactar ventas" : "Empezar prueba gratis"}
+                    {tier.usdMonthly === null ? "Contactar ventas" : "Empezar prueba gratis"}
                   </Button>
                 </CardContent>
               </Card>
@@ -488,7 +555,7 @@ export default function ForkCastLanding() {
       </section>
 
       {/* Suppliers Section */}
-      <section className="py-20 bg-stone-600">
+      <section id="proveedores" className="py-20 bg-stone-600">
         <div className="container mx-auto px-4 max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">¿Sos proveedor de restaurantes?</h2>
@@ -541,54 +608,114 @@ export default function ForkCastLanding() {
 
             <div className="bg-white dark:bg-slate-800 rounded-2xl p-8">
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-6 text-center">
-                Hablemos de tu integración
+                Se parte de nuestra comunidad
               </h3>
               <p className="text-white dark:text-slate-300 mb-6 text-center bg-stone-600 rounded-lg p-4">
                 No tenemos planes de pago para proveedores. Queremos conocerte y entender cómo podemos trabajar juntos.
               </p>
 
-              <div className="space-y-4">
-                <Input placeholder="Nombre de la empresa" />
-                <Input placeholder="Tu nombre completo" />
-                <Input placeholder="Email de contacto" type="email" />
-                <Input placeholder="Teléfono" />
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo de productos que ofrecés" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="carnes">Carnes y embutidos</SelectItem>
-                    <SelectItem value="lacteos">Lácteos</SelectItem>
-                    <SelectItem value="verduras">Frutas y verduras</SelectItem>
-                    <SelectItem value="bebidas">Bebidas</SelectItem>
-                    <SelectItem value="panaderia">Panadería y pastelería</SelectItem>
-                    <SelectItem value="condimentos">Condimentos y especias</SelectItem>
-                    <SelectItem value="limpieza">Productos de limpieza</SelectItem>
-                    <SelectItem value="equipamiento">Equipamiento y utensilios</SelectItem>
-                    <SelectItem value="otros">Otros</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Zona de cobertura" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="montevideo">Montevideo</SelectItem>
-                    <SelectItem value="interior-uy">Interior de Uruguay</SelectItem>
-                    <SelectItem value="buenos-aires">Buenos Aires</SelectItem>
-                    <SelectItem value="interior-ar">Interior de Argentina</SelectItem>
-                    <SelectItem value="ambos">Argentina y Uruguay</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Textarea placeholder="Contanos sobre tu empresa y qué te interesa de ForkCast..." />
+              {submitSuccess ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="w-8 h-8 text-green-600" />
+                  </div>
+                  <h4 className="text-xl font-semibold mb-2">¡Gracias por contactarnos!</h4>
+                  <p className="text-slate-600 mb-6">
+                    Hemos recibido tu información y nos pondremos en contacto contigo en las próximas 24 horas.
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSubmitSuccess(false)}
+                  >
+                    Enviar otro mensaje
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleSupplierSubmit} className="space-y-4">
+                  {submitError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
+                      {submitError}
+                    </div>
+                  )}
+                  
+                  <Input 
+                    placeholder="Nombre de la empresa *" 
+                    name="companyName"
+                    value={supplierForm.companyName}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <Input 
+                    placeholder="Tu nombre completo *" 
+                    name="contactName"
+                    value={supplierForm.contactName}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <Input 
+                    placeholder="Email de contacto *" 
+                    type="email" 
+                    name="email"
+                    value={supplierForm.email}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <Input 
+                    placeholder="Teléfono" 
+                    name="phone"
+                    value={supplierForm.phone}
+                    onChange={handleInputChange}
+                  />
+                  <Select 
+                    value={supplierForm.productType} 
+                    onValueChange={(value) => handleInputChange({ target: { name: 'productType', value } } as any)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo de productos que ofrecés" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="carnes">Carnes y embutidos</SelectItem>
+                      <SelectItem value="lacteos">Lácteos</SelectItem>
+                      <SelectItem value="verduras">Frutas y verduras</SelectItem>
+                      <SelectItem value="bebidas">Bebidas</SelectItem>
+                      <SelectItem value="panaderia">Panadería y pastelería</SelectItem>
+                      <SelectItem value="condimentos">Condimentos y especias</SelectItem>
+                      <SelectItem value="limpieza">Productos de limpieza</SelectItem>
+                      <SelectItem value="equipamiento">Equipamiento y utensilios</SelectItem>
+                      <SelectItem value="otros">Otros</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select 
+                    value={supplierForm.coverageArea} 
+                    onValueChange={(value) => handleInputChange({ target: { name: 'coverageArea', value } } as any)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Zona de cobertura" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="montevideo">Montevideo</SelectItem>
+                      <SelectItem value="interior-uy">Interior de Uruguay</SelectItem>
+                      <SelectItem value="buenos-aires">Buenos Aires</SelectItem>
+                      <SelectItem value="interior-ar">Interior de Argentina</SelectItem>
+                      <SelectItem value="ambos">Argentina y Uruguay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Textarea 
+                    placeholder="Contanos sobre tu empresa y qué te interesa de ForkCast..." 
+                    name="message"
+                    value={supplierForm.message}
+                    onChange={handleInputChange}
+                  />
 
-                <Button
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold text-lg py-3"
-                  onClick={() => window.open(CALENDLY_URL, "_blank")}
-                >
-                  Agendar llamada
-                </Button>
-              </div>
+                  <Button
+                    type="submit"
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold text-lg py-3"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Enviando...' : 'Enviar información'}
+                  </Button>
+                </form>
+              )}
 
               <p className="text-sm text-slate-500 text-center mt-4">
                 Te contactaremos en menos de 24 horas para coordinar una llamada
@@ -637,176 +764,203 @@ export default function ForkCastLanding() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 bg-stone-600">
-        <div className="container mx-auto max-w-4xl text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">Empezá a comprar más inteligente hoy</h2>
-          <p className="text-xl text-stone-200 mb-8">
-            Probá ForkCast gratis por 14 días. No necesitás tarjeta de crédito.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              className="bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold text-lg px-8"
-              onClick={() => window.open(CALENDLY_URL, "_blank")}
-            >
-              Empezar prueba gratis
-            </Button>
-            <Dialog open={contactOpen} onOpenChange={setContactOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-white text-white hover:bg-white hover:text-stone-600 text-lg px-8 bg-transparent"
-                  onClick={() => window.open(CALENDLY_URL, "_blank")}
-                >
-                  Agendar demo
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Agendar una demo</DialogTitle>
-                  <DialogDescription>
-                    Contanos sobre tu restaurante y te mostramos cómo ForkCast puede ayudarte
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Input placeholder="Nombre completo" />
-                  <Input placeholder="Email" type="email" />
-                  <Input placeholder="Nombre del restaurante" />
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="País" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="uy">Uruguay</SelectItem>
-                      <SelectItem value="ar">Argentina</SelectItem>
-                      <SelectItem value="other">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input placeholder="Número de ubicaciones" type="number" />
-                  <Textarea placeholder="Contanos sobre tus desafíos actuales con las compras..." />
-                  <Button
-                    className="w-full bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold"
-                    onClick={() => window.open(CALENDLY_URL, "_blank")}
-                  >
-                    Agendar demo
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="bg-slate-900 text-white py-16">
         <div className="container mx-auto px-4 max-w-6xl">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
-                  <Utensils className="w-5 h-5 text-stone-900" />
-                </div>
+          <div className="flex flex-col items-center">
+            <div className="mb-6 text-center">
+              <div className="flex items-center space-x-3 mb-4 justify-center">
+                <img src="/logo.png" alt="ForkCast" className="h-10 w-auto" />
                 <span className="text-xl font-bold">ForkCast</span>
               </div>
-              <p className="text-slate-400 mb-4">
+              <p className="text-slate-400 max-w-md">
                 Compras inteligentes para restaurantes independientes en Argentina y Uruguay.
               </p>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4">Producto</h4>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#features" className="hover:text-white">
-                    Características
-                  </a>
-                </li>
-                <li>
-                  <a href="#pricing" className="hover:text-white">
-                    Precios
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Documentación
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    API
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4">Empresa</h4>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Sobre nosotros
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Contacto
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Carreras
-                  </a>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-slate-400">
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Política de privacidad
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Términos de servicio
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white">
-                    Cookies
-                  </a>
-                </li>
-              </ul>
             </div>
           </div>
 
           <Separator className="my-8 bg-slate-800" />
 
-          <div className="flex flex-col md:flex-row justify-between items-center">
+          <div className="flex flex-col justify-center items-center">
             <p className="text-slate-400">© 2025 ForkCast. Todos los derechos reservados.</p>
-            <div className="flex items-center gap-4 mt-4 md:mt-0">
-              <Select value={language} onValueChange={(value: "es" | "en") => setLanguage(value)}>
-                <SelectTrigger className="w-20 bg-slate-800 border-slate-700">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="es">🇦🇷 ES</SelectItem>
-                  <SelectItem value="en">🇺🇸 EN</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </div>
       </footer>
+      
+      {/* Calendly Dialog */}
+      <CalendlyDialog />
+
+      {/* Signup Dialog */}
+      <Dialog open={signupOpen} onOpenChange={setSignupOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Comienza tu prueba gratuita</DialogTitle>
+            <DialogDescription>
+              {selectedPlan === "starter" ? "Prueba gratuita - Plan Starter" : 
+               selectedPlan === "pro" ? "Prueba gratuita - Plan Pro" : 
+               selectedPlan === "enterprise" ? "Contacta con ventas - Plan Enterprise" : 
+               "Completa tus datos para comenzar"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {!signupSuccess ? (
+          <form className="space-y-4" onSubmit={async (e) => {
+            e.preventDefault()
+            setIsRegistering(true)
+            
+            try {
+              // Enviar datos al endpoint de registro
+              const response = await fetch('/api/register', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  ...registerForm,
+                  planType: selectedPlan,
+                  billingPeriod
+                }),
+              })
+              
+              const data = await response.json()
+              
+              if (!response.ok) {
+                throw new Error(data.error || data.message || 'Error al registrar')
+              }
+              
+              console.log('Registro exitoso:', data)
+              // Si todo va bien, mostramos el éxito
+              setSignupSuccess(true)
+            } catch (error) {
+              console.error('Error al registrar:', error)
+              alert('Ha ocurrido un error. Por favor intenta nuevamente.')
+            } finally {
+              setIsRegistering(false)
+            }
+          }}>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">Nombre de la empresa</span>
+                <Input 
+                  id="businessName" 
+                  placeholder="Restaurante ABC" 
+                  required 
+                  value={registerForm.businessName}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, businessName: e.target.value }))}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">Nombre completo</span>
+                <Input 
+                  id="fullName" 
+                  placeholder="Tu nombre y apellido" 
+                  required 
+                  value={registerForm.fullName}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, fullName: e.target.value }))}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">Email</span>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="tu@email.com" 
+                  required 
+                  value={registerForm.email}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">RUT / CUIT</span>
+                <Input 
+                  id="taxId" 
+                  placeholder="12345678-9 o 20-12345678-9" 
+                  required 
+                  value={registerForm.taxId}
+                  onChange={(e) => setRegisterForm(prev => ({ ...prev, taxId: e.target.value }))}
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <span className="block text-sm font-medium">Ubicación de tu restaurante</span>
+                <Select 
+                  onValueChange={(value) => setRegisterForm(prev => ({ ...prev, location: value }))}
+                  value={registerForm.location}
+                >
+                  <SelectTrigger id="location">
+                    <SelectValue placeholder="Selecciona ubicación" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Uruguay</SelectLabel>
+                      <SelectItem value="montevideo">Montevideo</SelectItem>
+                      <SelectItem value="interior-uy">Interior de Uruguay</SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Argentina</SelectLabel>
+                      <SelectItem value="buenos-aires">Buenos Aires</SelectItem>
+                      <SelectItem value="interior-ar">Interior de Argentina</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button variant="outline" type="button" onClick={() => setSignupOpen(false)} disabled={isRegistering}>Cancelar</Button>
+              <Button 
+                type="submit" 
+                className="bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold"
+                disabled={isRegistering}
+              >
+                {isRegistering ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-stone-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Procesando...
+                  </>
+                ) : (
+                  selectedPlan === "enterprise" ? "Enviar solicitud" : "Comenzar prueba gratuita"
+                )}
+              </Button>
+            </div>
+          </form>
+          ) : (
+          <div className="py-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
+              <CheckCircle size={24} />
+            </div>
+            <h3 className="text-xl font-bold mb-2">¡Registro exitoso!</h3>
+            <p className="text-gray-600 mb-6">
+              {selectedPlan === "enterprise" 
+                ? "Un representante de ventas se pondrá en contacto contigo pronto." 
+                : "Hemos creado tu cuenta y enviado las instrucciones para acceder a tu prueba gratuita al email proporcionado."}
+            </p>
+            <Button 
+              className="bg-amber-500 hover:bg-amber-600 text-stone-900 font-semibold w-full"
+              onClick={() => {
+                setSignupOpen(false)
+                setSignupSuccess(false)
+                setRegisterForm({
+                  businessName: '',
+                  fullName: '',
+                  email: '',
+                  taxId: '',
+                  location: ''
+                })
+              }}
+            >
+              Continuar
+            </Button>
+          </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
