@@ -31,7 +31,7 @@ import {
   Shield,
   Globe,
 } from "lucide-react"
-const CALENDLY_URL = "https://calendly.com/leandro-forkcast"
+const CALENDLY_URL = "https://calendly.com/agustina-forkcast/30min?month=2025-10&date=2025-10-01"
 
 const pricingTiers = {
   starter: { usdMonthly: 0, usdAnnual: 0, name: "Starter" },
